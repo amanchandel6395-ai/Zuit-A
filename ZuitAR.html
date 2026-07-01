@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZuitAR — Turn anything into AR</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --void: #0A0A0B;
+    --surface: #131316;
+    --surface-2: #1B1B1F;
+    --line: rgba(255,255,255,0.08);
+    --line-bright: rgba(255,255,255,0.16);
+    --violet: #7C5CFF;
+    --violet-soft: rgba(124,92,255,0.14);
+    --violet-glow: rgba(124,92,255,0.35);
+    --cyan: #00E5C7;
+    --cyan-soft: rgba(0,229,199,0.12);
+    --ink: #F5F4F2;
+    --ink-dim: #A8A8AE;
+    --ink-faint: #5A5A60;
+    --danger: #FF5C5C;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--void);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    position: relative;
+  }
+
+  /* ambient grid background */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 64px 64px;
+    opacity: 0.35;
+    mask-image: radial-gradient(ellipse 80% 50% at 50% 0%, black 40%, transparent 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  ::selection { background: var(--violet); color: white; }
+
+  /* ───────────── NAV ───────────── */
+  nav {
+    position: sticky; top: 0; z-index: 200;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 32px;
+    background: rgba(10,10,11,0.75);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    width: 30px; height: 30px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .brand-mark svg { width: 100%; height: 100%; }
+  .brand-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700; font-size: 1.15rem; letter-spacing: -0.3px;
+  }
+  .brand-name .ar { color: var(--violet); }
+  .nav-right { display: flex; align-items: center; gap: 18px; }
+  .nav-link {
+    font-size: 13px; color: var(--ink-dim); text-decoration: none;
+    font-weight: 500; transition: color .15s;
+  }
+  .nav-link:hover { color: var(--ink); }
+  .nav-status {
+    display: flex; align-items: center; gap: 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--cyan);
+    background: var(--cyan-soft);
+    border: 1px solid rgba(0,229,199,0.25);
+    padding: 5px 11px; border-radius: 50px;
+  }
+  .dot-pulse {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--cyan);
+    animation: blink 1.6s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* ───────────── HERO ───────────── */
+  .hero {
+    position: relative; z-index: 1;
+    max-width: 720px; margin: 0 auto;
+    text-align: center;
+    padding: 88px 24px 56px;
+  }
+  .hero-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--violet);
+    background: var(--violet-soft);
+    border: 1px solid rgba(124,92,255,0.3);
+    padding: 7px 14px; border-radius: 50px;
+    margin-bottom: 28px;
+  }
+  .hero h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(2.4rem, 6vw, 3.6rem);
+    font-weight: 700; line-height: 1.04; letter-spacing: -1.8px;
+    margin-bottom: 18px;
+  }
+  .hero h1 .grad {
+    background: linear-gradient(120deg, var(--violet), var(--cyan));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero p {
+    color: var(--ink-dim); font-size: 1.02rem; line-height: 1.65;
+    max-width: 480px; margin: 0 auto;
+  }
+
+  .type-pills {
+    display: flex; gap: 10px; justify-content: center;
+    margin-top: 32px; flex-wrap: wrap;
+  }
+  .type-pill {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12.5px; font-weight: 600; color: var(--ink-dim);
+    background: var(--surface); border: 1px solid var(--line);
+    padding: 8px 14px; border-radius: 10px;
+  }
+  .type-pill .ic { font-size: 15px; }
+
+  /* ───────────── MAIN LAYOUT ───────────── */
+  .stage {
+    position: relative; z-index: 1;
+    max-width: 1080px; margin: 0 auto;
+    padding: 0 24px 100px;
+  }
+
+  /* Mode tabs */
+  .mode-tabs {
+    display: flex; gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 6px;
+    margin-bottom: 24px;
+    max-width: 560px;
+  }
+  .mode-tab {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 12px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    border: none; background: none;
+    color: var(--ink-faint);
+    font-family: 'Inter', sans-serif;
+    transition: all .18s;
+  }
+  .mode-tab .ic { font-size: 18px; }
+  .mode-tab .lbl { font-size: 11.5px; font-weight: 600; letter-spacing: 0.2px; }
+  .mode-tab.active {
+    background: var(--violet);
+    color: white;
+    box-shadow: 0 4px 20px rgba(124,92,255,0.35);
+  }
+  .mode-tab:not(.active):hover { color: var(--ink-dim); background: var(--surface-2); }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 22px;
+    position: relative;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .panel-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px; letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--violet);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .panel-label .n {
+    width: 18px; height: 18px; border-radius: 5px;
+    background: var(--violet-soft); border: 1px solid rgba(124,92,255,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: var(--violet);
+  }
+
+  /* Dropzone — shared across all 3 modes */
+  .dropzone {
+    border: 1.5px dashed var(--line-bright);
+    border-radius: 14px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .18s;
+    background: var(--surface-2);
+    position: relative;
+    overflow: hidden;
+  }
+  .dropzone::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at 50% 0%, var(--violet-soft), transparent 70%);
+    opacity: 0; transition: opacity .25s;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--violet);
+    background: rgba(124,92,255,0.06);
+  }
+  .dropzone:hover::before, .dropzone.dragover::before { opacity: 1; }
+  .dropzone input { display: none; }
+  .dz-icon {
+    font-size: 30px; margin-bottom: 12px;
+    position: relative; z-index: 1;
+  }
+  .dropzone h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 5px; position: relative; z-index: 1; }
+  .dropzone p { font-size: 0.78rem; color: var(--ink-faint); position: relative; z-index: 1; }
+  .fmt-row {
+    display: flex; gap: 6px; justify-content: center; margin-top: 14px;
+    position: relative; z-index: 1; flex-wrap: wrap;
+  }
+  .fmt-tag {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--surface); border: 1px solid var(--line);
+    padding: 3px 9px; border-radius: 5px;
+    font-size: 9.5px; color: var(--ink-faint); font-weight: 500;
+  }
+
+  /* preview after upload */
+  .preview-stack { display: none; flex-direction: column; gap: 12px; }
+  .preview-stack.show { display: flex; }
+  .preview-frame {
+    background: var(--surface-2);
+    border-radius: 12px;
+    height: 200px;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; position: relative;
+  }
+  .checker {
+    position: absolute; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(45deg, #222 25%, transparent 25%),
+      linear-gradient(-45deg, #222 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #222 75%),
+      linear-gradient(-45deg, transparent 75%, #222 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+    opacity: 0.4;
+  }
+  .preview-frame img, .preview-frame video {
+    max-height: 100%; max-width: 100%; object-fit: contain;
+    position: relative; z-index: 1;
+  }
+  .preview-frame .glb-icon {
+    position: relative; z-index: 1;
+    font-size: 48px;
+  }
+
+  .file-row {
+    display: flex; align-items: center; gap: 11px;
+    background: var(--surface-2); border-radius: 10px; padding: 11px 14px;
+  }
+  .file-row .fic { font-size: 19px; }
+  .file-row .ftxt { flex: 1; min-width: 0; }
+  .file-row .ftxt strong { font-size: 0.82rem; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-row .ftxt span { font-size: 0.7rem; color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; }
+  .file-row button {
+    background: none; border: 1px solid var(--line);
+    color: var(--ink-faint); padding: 5px 11px;
+    border-radius: 7px; font-size: 11px; cursor: pointer;
+    font-family: 'Inter', sans-serif; font-weight: 500;
+  }
+  .file-row button:hover { border-color: var(--violet); color: var(--violet); }
+
+  /* settings */
+  .field { margin-bottom: 16px; }
+  .field-label {
+    font-size: 12px; font-weight: 600; color: var(--ink-dim);
+    display: flex; justify-content: space-between; margin-bottom: 8px;
+  }
+  .field-label .val { color: var(--violet); font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+  input[type="range"] {
+    width: 100%; accent-color: var(--violet); height: 4px; cursor: pointer;
+  }
+  .text-input {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 11px 14px;
+    color: var(--ink);
+    font-size: 0.85rem;
+    font-family: 'Inter', sans-serif;
+    transition: border-color .15s;
+  }
+  .text-input:focus { outline: none; border-color: var(--violet); }
+  .text-input::placeholder { color: var(--ink-faint); }
+
+  .switch-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface-2); border-radius: 10px; padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .switch-text strong { font-size: 0.82rem; font-weight: 500; display: block; }
+  .switch-text span { font-size: 0.7rem; color: var(--ink-faint); }
+  .switch {
+    width: 38px; height: 21px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 50px;
+    position: relative; cursor: pointer;
+    transition: all .18s; flex-shrink: 0;
+  }
+  .switch.on { background: var(--violet); border-color: var(--violet); }
+  .switch::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 15px; height: 15px;
+    background: white; border-radius: 50%;
+    transition: transform .18s;
+  }
+  .switch.on::after { transform: translateX(17px); }
+
+  .btn-primary {
+    width: 100%; padding: 15px;
+    background: var(--violet);
+    border: none; border-radius: 12px;
+    color: white; font-size: 0.95rem; font-weight: 600;
+    cursor: pointer; font-family: 'Inter', sans-serif;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all .18s;
+    box-shadow: 0 4px 24px rgba(124,92,255,0.3);
+  }
+  .btn-primary:hover:not(:disabled) { background: #6B4DE6; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+  /* progress */
+  .progress-list { display: none; flex-direction: column; gap: 9px; margin-top: 16px; }
+  .progress-list.show { display: flex; }
+  .progress-item {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.78rem; color: var(--ink-faint);
+    font-family: 'JetBrains Mono', monospace;
+    transition: color .25s;
+  }
+  .progress-item.active { color: var(--violet); }
+  .progress-item.done { color: var(--cyan); }
+  .p-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--line-bright); flex-shrink: 0;
+    transition: background .25s;
+  }
+  .progress-item.active .p-dot { background: var(--violet); animation: blink 1s infinite; }
+  .progress-item.done .p-dot { background: var(--cyan); }
+
+  /* ───────────── OUTPUT ───────────── */
+  .output {
+    display: none;
+    margin-top: 18px;
+  }
+  .output.show { display: block; }
+
+  .output-banner {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--cyan-soft);
+    border: 1px solid rgba(0,229,199,0.25);
+    border-radius: 14px; padding: 14px 18px;
+    margin-bottom: 18px;
+  }
+  .output-banner .b-ic { font-size: 18px; }
+  .output-banner span { font-size: 0.85rem; color: var(--ink); }
+  .output-banner strong { color: var(--cyan); }
+
+  .out-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1.3fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 860px) { .out-grid { grid-template-columns: 1fr; } }
+
+  .out-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 18px;
+  }
+  .out-card h4 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px; letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 14px;
+  }
+
+  #qr-render {
+    background: white; border-radius: 12px; padding: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .qr-cap {
+    text-align: center; margin-top: 10px;
+    font-size: 10.5px; color: var(--ink-faint);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .ar-preview {
+    background: var(--surface-2);
+    border-radius: 12px;
+    height: 200px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  .ar-preview .room {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, #16141c 0%, #0c0b0f 55%, #1a1420 100%);
+  }
+  .ar-preview .floor {
+    position: absolute; bottom: 32px; left: 8%; right: 8%; height: 1px;
+    background: rgba(124,92,255,0.18);
+  }
+  .ar-preview img, .ar-preview video {
+    position: relative; z-index: 1;
+    max-height: 78%; max-width: 78%; object-fit: contain;
+    filter: drop-shadow(0 10px 28px rgba(0,0,0,0.6));
+  }
+  .ar-preview .scan-tag {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    z-index: 2;
+    background: var(--violet); color: white;
+    padding: 5px 13px; border-radius: 50px;
+    font-size: 10.5px; font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .dl-list { display: flex; flex-direction: column; gap: 8px; }
+  .dl-btn {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 13px;
+    cursor: pointer; transition: all .15s;
+    text-decoration: none; color: var(--ink);
+  }
+  .dl-btn:hover { border-color: var(--violet); background: var(--violet-soft); }
+  .dl-btn .d-ic { font-size: 17px; }
+  .dl-btn .d-txt strong { font-size: 0.8rem; display: block; }
+  .dl-btn .d-txt span { font-size: 0.68rem; color: var(--ink-faint); }
+  .dl-btn .d-arrow { margin-left: auto; color: var(--ink-faint); font-size: 13px; }
+
+  /* Deploy steps */
+  .deploy-card {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+  }
+  .deploy-steps { display: flex; flex-direction: column; gap: 11px; }
+  .d-step { display: flex; align-items: flex-start; gap: 11px; }
+  .d-num {
+    width: 21px; height: 21px; border-radius: 50%;
+    background: var(--violet-soft); border: 1px solid rgba(124,92,255,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: var(--violet);
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .d-step p { font-size: 0.8rem; color: var(--ink-dim); line-height: 1.5; }
+  .d-step strong { color: var(--ink); }
+  .d-step code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--surface-2); padding: 1px 6px; border-radius: 4px;
+    font-size: 0.76rem; color: var(--cyan);
+  }
+
+  /* ───────────── FOOTER ───────────── */
+  footer {
+    position: relative; z-index: 1;
+    border-top: 1px solid var(--line);
+    padding: 28px 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; color: var(--ink-faint);
+  }
+
+  /* responsive nav */
+  @media (max-width: 560px) {
+    nav { padding: 14px 18px; }
+    .nav-link { display: none; }
+    .hero { padding: 56px 20px 40px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 32 32" fill="none">
+        <rect x="2" y="2" width="9" height="2" rx="1" fill="#7C5CFF"/>
+        <rect x="2" y="2" width="2" height="9" rx="1" fill="#7C5CFF"/>
+        <rect x="21" y="2" width="9" height="2" rx="1" fill="#00E5C7"/>
+        <rect x="28" y="2" width="2" height="9" rx="1" fill="#00E5C7"/>
+        <rect x="2" y="28" width="9" height="2" rx="1" fill="#00E5C7"/>
+        <rect x="2" y="21" width="2" height="9" rx="1" fill="#00E5C7"/>
+        <rect x="21" y="28" width="9" height="2" rx="1" fill="#7C5CFF"/>
+        <rect x="28" y="21" width="2" height="9" rx="1" fill="#7C5CFF"/>
+        <circle cx="16" cy="16" r="4.5" fill="none" stroke="#7C5CFF" stroke-width="1.6"/>
+        <circle cx="16" cy="16" r="1.6" fill="#00E5C7"/>
+      </svg>
+    </div>
+    <div class="brand-name">Zuit<span class="ar">AR</span></div>
+  </div>
+  <div class="nav-right">
+    <a class="nav-link" href="#how">How it works</a>
+    <div class="nav-status"><div class="dot-pulse"></div>RUNS IN-BROWSER</div>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-tag">◆ No app · No account · No upload to a server</div>
+  <h1>Turn anything into <span class="grad">scannable AR</span></h1>
+  <p>Upload a photo, a video, or a 3D model — get back a QR code that places it life-size in anyone's room, the moment they scan it.</p>
+  <div class="type-pills">
+    <div class="type-pill"><span class="ic">🖼️</span> Photos</div>
+    <div class="type-pill"><span class="ic">🎬</span> Videos</div>
+    <div class="type-pill"><span class="ic">📦</span> 3D models (.glb)</div>
+  </div>
+</div>
+
+<div class="stage">
+
+  <div class="mode-tabs" id="modeTabs">
+    <button class="mode-tab active" data-mode="image">
+      <span class="ic">🖼️</span><span class="lbl">Photo</span>
+    </button>
+    <button class="mode-tab" data-mode="video">
+      <span class="ic">🎬</span><span class="lbl">Video</span>
+    </button>
+    <button class="mode-tab" data-mode="glb">
+      <span class="ic">📦</span><span class="lbl">3D Model</span>
+    </button>
+  </div>
+
+  <div class="grid-2">
+
+    <!-- LEFT: Upload panel -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-label"><div class="n">1</div>UPLOAD</div>
+      </div>
+
+      <!-- IMAGE dropzone -->
+      <div class="dropzone" id="dz-image" data-mode="image">
+        <input type="file" id="input-image" accept="image/*">
+        <div class="dz-icon">🖼️</div>
+        <h3>Drop a photo here</h3>
+        <p>or click to browse — transparent PNG works best</p>
+        <div class="fmt-row">
+          <span class="fmt-tag">PNG</span><span class="fmt-tag">JPG</span><span class="fmt-tag">WEBP</span>
+        </div>
+      </div>
+      <div class="preview-stack" id="preview-image">
+        <div class="preview-frame"><div class="checker"></div><img id="img-preview-el" src="" alt=""></div>
+        <div class="file-row">
+          <span class="fic">🖼️</span>
+          <div class="ftxt"><strong id="img-fname">—</strong><span id="img-fsize">—</span></div>
+          <button onclick="resetMode('image')">Change</button>
+        </div>
+      </div>
+
+      <!-- VIDEO dropzone -->
+      <div class="dropzone" id="dz-video" data-mode="video" style="display:none">
+        <input type="file" id="input-video" accept="video/*">
+        <div class="dz-icon">🎬</div>
+        <h3>Drop a video here</h3>
+        <p>or click to browse — MP4 recommended, under 30s</p>
+        <div class="fmt-row">
+          <span class="fmt-tag">MP4</span><span class="fmt-tag">WEBM</span><span class="fmt-tag">MOV</span>
+        </div>
+      </div>
+      <div class="preview-stack" id="preview-video">
+        <div class="preview-frame"><video id="vid-preview-el" muted loop autoplay playsinline></video></div>
+        <div class="file-row">
+          <span class="fic">🎬</span>
+          <div class="ftxt"><strong id="vid-fname">—</strong><span id="vid-fsize">—</span></div>
+          <button onclick="resetMode('video')">Change</button>
+        </div>
+      </div>
+
+      <!-- GLB dropzone -->
+      <div class="dropzone" id="dz-glb" data-mode="glb" style="display:none">
+        <input type="file" id="input-glb" accept=".glb,.gltf">
+        <div class="dz-icon">📦</div>
+        <h3>Drop a .glb model here</h3>
+        <p>a ready-made 3D model — from Blender, Sketchfab, etc.</p>
+        <div class="fmt-row">
+          <span class="fmt-tag">GLB</span><span class="fmt-tag">GLTF</span>
+        </div>
+      </div>
+      <div class="preview-stack" id="preview-glb">
+        <div class="preview-frame"><div class="glb-icon">📦</div></div>
+        <div class="file-row">
+          <span class="fic">📦</span>
+          <div class="ftxt"><strong id="glb-fname">—</strong><span id="glb-fsize">—</span></div>
+          <button onclick="resetMode('glb')">Change</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Settings panel -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-label"><div class="n">2</div>CONFIGURE</div>
+      </div>
+
+      <div class="field" id="field-height">
+        <div class="field-label">Real-world height <span class="val" id="heightVal">1.8m</span></div>
+        <input type="range" id="heightSlider" min="20" max="300" value="180">
+      </div>
+
+      <div class="field">
+        <div class="field-label">Label <span class="val">optional</span></div>
+        <input type="text" class="text-input" id="arLabel" placeholder="e.g. Margherita Pizza, Product X" maxlength="40">
+      </div>
+
+      <div class="switch-row" id="row-shadow">
+        <div class="switch-text"><strong>Ground shadow</strong><span>Soft contact shadow under the object</span></div>
+        <div class="switch on" id="shadowToggle" onclick="this.classList.toggle('on')"></div>
+      </div>
+
+      <div class="switch-row" id="row-autorotate" style="display:none">
+        <div class="switch-text"><strong>Auto-rotate</strong><span>Slowly spin the 3D model</span></div>
+        <div class="switch on" id="rotateToggle" onclick="this.classList.toggle('on')"></div>
+      </div>
+
+      <button class="btn-primary" id="generateBtn" disabled onclick="generate()">
+        <span>⚡</span> Generate AR experience
+      </button>
+
+      <div class="progress-list" id="progressList">
+        <div class="progress-item" id="step1"><div class="p-dot"></div>Reading file…</div>
+        <div class="progress-item" id="step2"><div class="p-dot"></div>Building 3D scene…</div>
+        <div class="progress-item" id="step3"><div class="p-dot"></div>Packaging AR experience…</div>
+        <div class="progress-item" id="step4"><div class="p-dot"></div>Generating QR code…</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- OUTPUT -->
+  <div class="output" id="output">
+    <div class="output-banner">
+      <span class="b-ic">✓</span>
+      <span>AR experience ready. <strong>Deploy it</strong> to make the QR code scannable from any phone.</span>
+    </div>
+
+    <div class="out-grid">
+      <div class="out-card">
+        <h4>QR Code</h4>
+        <div id="qr-render"></div>
+        <div class="qr-cap" id="qrCap">Paste your GitHub Pages link into qr.io for real QR</div>
+      </div>
+
+      <div class="out-card">
+        <h4>AR Preview</h4>
+        <div class="ar-preview" id="arPreviewBox">
+          <div class="room"></div><div class="floor"></div>
+          <span class="scan-tag">📱 appears in your room</span>
+        </div>
+      </div>
+
+      <div class="out-card">
+        <h4>Downloads</h4>
+        <div class="dl-list">
+          <a class="dl-btn" id="dlQR">
+            <span class="d-ic">🔲</span>
+            <div class="d-txt"><strong>QR code</strong><span>PNG image</span></div>
+            <span class="d-arrow">↓</span>
+          </a>
+          <a class="dl-btn" id="dlHTML">
+            <span class="d-ic">🌐</span>
+            <div class="d-txt"><strong>AR experience</strong><span>Self-contained HTML</span></div>
+            <span class="d-arrow">↓</span>
+          </a>
+          <a class="dl-btn" id="dlGLB" style="display:none">
+            <span class="d-ic">📦</span>
+            <div class="d-txt"><strong>3D model</strong><span>.glb file</span></div>
+            <span class="d-arrow">↓</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="out-card deploy-card" id="how">
+        <h4>Deploy — make the QR scannable (free, ~5 min)</h4>
+        <div class="deploy-steps">
+          <div class="d-step"><div class="d-num">1</div><p>Download the <strong>AR experience</strong> HTML file above.</p></div>
+          <div class="d-step"><div class="d-num">2</div><p>Create a free account at <code>github.com</code>, then a new repository.</p></div>
+          <div class="d-step"><div class="d-num">3</div><p>Upload the HTML file, then go to <strong>Settings → Pages</strong> and enable it for the <code>main</code> branch.</p></div>
+          <div class="d-step"><div class="d-num">4</div><p>You'll get a live link like <code>yourname.github.io/repo/file.html</code> — paste it into any free QR generator (e.g. <code>qr.io</code>) to get a <strong>working scannable QR code</strong>.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>ZuitAR — built to run entirely in your browser. Nothing is uploaded anywhere.</span>
+  <span class="mono">v1.0</span>
+</footer>
+
+<script>
+/* ════════════════ STATE ════════════════ */
+let currentMode = 'image';
+let uploadedDataURL = null;   // image data URL (resized)
+let uploadedVideoFile = null; // raw video File object
+let uploadedVideoURL = null;  // object URL for preview/embedding
+let uploadedGLBBytes = null;  // raw glb ArrayBuffer (direct upload mode)
+let imgDims = null;
+let generatedHTML = null;
+let generatedGLB = null;
+
+/* ════════════════ MODE SWITCHING ════════════════ */
+document.querySelectorAll('.mode-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentMode = tab.dataset.mode;
+    switchModeUI(currentMode);
+  });
+});
+
+function switchModeUI(mode) {
+  ['image','video','glb'].forEach(m => {
+    document.getElementById('dz-'+m).style.display = (m === mode && !hasUpload(m)) ? '' : 'none';
+    document.getElementById('preview-'+m).classList.toggle('show', m === mode && hasUpload(m));
+  });
+  document.getElementById('field-height').style.display = (mode === 'glb') ? 'none' : '';
+  document.getElementById('row-autorotate').style.display = (mode === 'glb') ? '' : 'none';
+  document.getElementById('output').classList.remove('show');
+  document.getElementById('progressList').classList.remove('show');
+  updateGenerateState();
+}
+
+function hasUpload(mode) {
+  if (mode === 'image') return !!uploadedDataURL;
+  if (mode === 'video') return !!uploadedVideoFile;
+  if (mode === 'glb') return !!uploadedGLBBytes;
+  return false;
+}
+
+function updateGenerateState() {
+  document.getElementById('generateBtn').disabled = !hasUpload(currentMode);
+}
+
+function resetMode(mode) {
+  if (mode === 'image') { uploadedDataURL = null; imgDims = null; document.getElementById('input-image').value=''; }
+  if (mode === 'video') { uploadedVideoFile = null; uploadedVideoURL = null; document.getElementById('input-video').value=''; }
+  if (mode === 'glb')   { uploadedGLBBytes = null; document.getElementById('input-glb').value=''; }
+  switchModeUI(mode);
+}
+
+/* ════════════════ DROPZONE WIRING (shared pattern) ════════════════ */
+function wireDropzone(zoneId, inputId, onFile) {
+  const zone = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f) onFile(f);
+  });
+  input.addEventListener('change', e => { if (e.target.files[0]) onFile(e.target.files[0]); });
+}
+
+/* ── Image upload: resize to keep things fast & avoid mobile freeze ── */
+wireDropzone('dz-image', 'input-image', file => {
+  if (!file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX_DIM = 1200;
+      let { width: w, height: h } = img;
+      if (w > MAX_DIM || h > MAX_DIM) {
+        const scale = MAX_DIM / Math.max(w, h);
+        w = Math.round(w * scale); h = Math.round(h * scale);
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const cx = c.getContext('2d');
+      cx.clearRect(0,0,w,h);
+      cx.drawImage(img, 0, 0, w, h);
+      uploadedDataURL = c.toDataURL('image/png');
+      imgDims = { w, h };
+
+      document.getElementById('img-preview-el').src = uploadedDataURL;
+      document.getElementById('img-fname').textContent = file.name;
+      const kb = Math.round(uploadedDataURL.length * 0.75 / 1024);
+      document.getElementById('img-fsize').textContent = kb + ' KB · ' + w + '×' + h;
+      switchModeUI('image');
+    };
+    img.onerror = () => alert('Could not read that image — try another file.');
+    img.src = e.target.result;
+  };
+  reader.onerror = () => alert('Could not read that file.');
+  reader.readAsDataURL(file);
+});
+
+/* ── Video upload ── */
+wireDropzone('dz-video', 'input-video', file => {
+  if (!file.type.startsWith('video/')) { alert('Please choose a video file.'); return; }
+  const MAX_MB = 50;
+  if (file.size > MAX_MB * 1024 * 1024) {
+    alert('That video is over ' + MAX_MB + 'MB. Please choose a shorter / lower-resolution clip so it loads smoothly on phones.');
+    return;
+  }
+  uploadedVideoFile = file;
+  uploadedVideoURL = URL.createObjectURL(file);
+  document.getElementById('vid-preview-el').src = uploadedVideoURL;
+  document.getElementById('vid-fname').textContent = file.name;
+  document.getElementById('vid-fsize').textContent = (file.size/1024/1024).toFixed(1) + ' MB';
+  switchModeUI('video');
+});
+
+/* ── GLB direct upload ── */
+wireDropzone('dz-glb', 'input-glb', file => {
+  const name = file.name.toLowerCase();
+  if (!name.endsWith('.glb') && !name.endsWith('.gltf')) { alert('Please choose a .glb or .gltf file.'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    uploadedGLBBytes = e.target.result; // ArrayBuffer
+    document.getElementById('glb-fname').textContent = file.name;
+    document.getElementById('glb-fsize').textContent = (file.size/1024/1024).toFixed(2) + ' MB';
+    switchModeUI('glb');
+  };
+  reader.onerror = () => alert('Could not read that file.');
+  reader.readAsArrayBuffer(file);
+});
+
+/* ════════════════ SETTINGS UI ════════════════ */
+document.getElementById('heightSlider').addEventListener('input', function() {
+  document.getElementById('heightVal').textContent = (this.value/100).toFixed(1) + 'm';
+});
+
+/* ════════════════ PROGRESS HELPERS ════════════════ */
+function setStep(n, state) { document.getElementById('step'+n).className = 'progress-item ' + state; }
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* ════════════════ GLB BUILDER (image billboard) ════════════════ */
+function buildBillboardGLB(imgDataURL, dims, realHeightM) {
+  const realH = realHeightM;
+  const realW = (dims.w / dims.h) * realH;
+  const hw = realW / 2;
+
+  const positions = new Float32Array([-hw,0,0, hw,0,0, hw,realH,0, -hw,realH,0]);
+  const normals   = new Float32Array([0,0,1, 0,0,1, 0,0,1, 0,0,1]);
+  const uvs       = new Float32Array([0,1, 1,1, 1,0, 0,0]);
+  const indices   = new Uint16Array([0,1,2, 0,2,3]);
+
+  const b64 = imgDataURL.split(',')[1];
+  const imgBin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const mimeMatch = imgDataURL.match(/data:([^;]+)/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+
+  return packGLB(positions, normals, uvs, indices, imgBin, mime, [-hw,0,0], [hw,realH,0]);
+}
+
+function packGLB(positions, normals, uvs, indices, imgBin, mime, posMin, posMax) {
+  const idxBytes = new Uint8Array(indices.buffer);
+  let idxPadded = idxBytes;
+  if (idxBytes.byteLength % 4 !== 0) {
+    idxPadded = new Uint8Array(idxBytes.byteLength + (4 - idxBytes.byteLength % 4));
+    idxPadded.set(idxBytes);
+  }
+  const posBytes  = new Uint8Array(positions.buffer);
+  const normBytes = new Uint8Array(normals.buffer);
+  const uvBytes   = new Uint8Array(uvs.buffer);
+
+  const off0 = 0;
+  const off1 = off0 + idxPadded.byteLength;
+  const off2 = off1 + posBytes.byteLength;
+  const off3 = off2 + normBytes.byteLength;
+  const off4 = off3 + uvBytes.byteLength;
+  const totalBin = off4 + imgBin.byteLength;
+
+  const bin = new Uint8Array(totalBin);
+  bin.set(idxPadded, off0);
+  bin.set(posBytes,  off1);
+  bin.set(normBytes, off2);
+  bin.set(uvBytes,   off3);
+  bin.set(imgBin,    off4);
+
+  const json = {
+    asset: {version:"2.0", generator:"ZuitAR"},
+    scene: 0,
+    scenes: [{nodes:[0]}],
+    nodes: [{mesh:0, name:"Subject"}],
+    meshes: [{primitives:[{attributes:{POSITION:1,NORMAL:2,TEXCOORD_0:3},indices:0,material:0}]}],
+    accessors: [
+      {bufferView:0, componentType:5123, count:indices.length, type:"SCALAR", max:[3], min:[0]},
+      {bufferView:1, componentType:5126, count:4, type:"VEC3", max:posMax, min:posMin},
+      {bufferView:2, componentType:5126, count:4, type:"VEC3", max:[0,0,1], min:[0,0,1]},
+      {bufferView:3, componentType:5126, count:4, type:"VEC2", max:[1,1], min:[0,0]}
+    ],
+    bufferViews: [
+      {buffer:0, byteOffset:off0, byteLength:idxPadded.byteLength, target:34963},
+      {buffer:0, byteOffset:off1, byteLength:posBytes.byteLength,  target:34962, byteStride:12},
+      {buffer:0, byteOffset:off2, byteLength:normBytes.byteLength, target:34962, byteStride:12},
+      {buffer:0, byteOffset:off3, byteLength:uvBytes.byteLength,   target:34962, byteStride:8},
+      {buffer:0, byteOffset:off4, byteLength:imgBin.byteLength}
+    ],
+    buffers: [{byteLength:totalBin}],
+    images: [{bufferView:4, mimeType:mime}],
+    samplers: [{}],
+    textures: [{sampler:0, source:0}],
+    materials: [{
+      name:"SubjectMat",
+      pbrMetallicRoughness:{ baseColorTexture:{index:0}, metallicFactor:0.0, roughnessFactor:1.0 },
+      alphaMode:"BLEND", doubleSided:true
+    }]
+  };
+
+  const jsonStr = JSON.stringify(json);
+  let jsonBytes = new TextEncoder().encode(jsonStr);
+  while (jsonBytes.byteLength % 4 !== 0) {
+    const padded = new Uint8Array(jsonBytes.byteLength + 1);
+    padded.set(jsonBytes); padded[jsonBytes.byteLength] = 0x20;
+    jsonBytes = padded;
+  }
+
+  const headerLen = 12;
+  const chunk0Len = 8 + jsonBytes.byteLength;
+  const chunk1Len = 8 + totalBin;
+  const glbLen = headerLen + chunk0Len + chunk1Len;
+
+  const glb = new Uint8Array(glbLen);
+  const view = new DataView(glb.buffer);
+  view.setUint32(0, 0x46546C67, true);
+  view.setUint32(4, 2, true);
+  view.setUint32(8, glbLen, true);
+  view.setUint32(12, jsonBytes.byteLength, true);
+  view.setUint32(16, 0x4E4F534A, true);
+  glb.set(jsonBytes, 20);
+  const c1off = 20 + jsonBytes.byteLength;
+  view.setUint32(c1off, totalBin, true);
+  view.setUint32(c1off+4, 0x004E4942, true);
+  glb.set(bin, c1off+8);
+
+  return glb;
+}
+
+/* ════════════════ AR HTML BUILDER — billboard (image) ════════════════ */
+function buildImageARHTML(imgSrc, dims, label, shadow, heightCm) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AR — ${escapeHTML(label)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:sans-serif}
+#video{position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:1}
+#canvas{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2;touch-action:none}
+#ui{position:fixed;bottom:0;left:0;right:0;z-index:10;padding:12px 16px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.btn{background:rgba(124,92,255,0.92);color:white;border:none;border-radius:50px;padding:13px 26px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(124,92,255,0.4)}
+.btn.sec{background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.15);font-size:13px;padding:10px 20px}
+.controls{display:flex;gap:10px;align-items:center}
+#hint{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:white;padding:9px 18px;border-radius:50px;font-size:13px;z-index:10;text-align:center;border:1px solid rgba(124,92,255,0.3);white-space:nowrap;transition:opacity .4s}
+#namelabel{position:fixed;z-index:10;color:white;font-weight:800;font-size:1.1rem;text-shadow:0 2px 8px rgba(0,0,0,0.8);pointer-events:none;display:none;background:rgba(124,92,255,0.85);padding:4px 14px;border-radius:50px}
+.sizerow{display:flex;align-items:center;gap:8px}
+.sizerow span{color:rgba(255,255,255,0.7);font-size:12px}
+input[type=range]{width:140px;accent-color:#7C5CFF}
+#loading{position:fixed;inset:0;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;color:white}
+.sp{width:44px;height:44px;border:3px solid #222;border-top:3px solid #7C5CFF;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading h2{color:#7C5CFF;margin-bottom:6px}
+#loading p{color:#666;font-size:.85rem;text-align:center;padding:0 30px}
+</style>
+</head>
+<body>
+<div id="loading"><div class="sp"></div><h2>ZuitAR Loading…</h2><p>Allow camera access,<br>then point at a flat surface</p></div>
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+<div id="hint">Tap anywhere to place</div>
+<div id="namelabel">${escapeHTML(label)}</div>
+<div id="ui">
+  <div class="sizerow">
+    <span>Size:</span>
+    <input type="range" id="sz" min="80" max="500" value="220" oninput="imgSize=+this.value;szlbl.textContent=this.value+'px'">
+    <span id="szlbl">220px</span>
+  </div>
+  <div class="controls">
+    <button class="btn sec" onclick="placed=false;hint.textContent='Tap anywhere to place';hint.style.opacity=1;namelabel.style.display='none'">↺ Reset</button>
+    <button class="btn" onclick="place()">📍 Place ${escapeHTML(label)}</button>
+    <button class="btn sec" onclick="snap()">📸 Capture</button>
+  </div>
+</div>
+<script>
+const video=document.getElementById('video');
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+const hint=document.getElementById('hint');
+const namelabel=document.getElementById('namelabel');
+let placed=false,posX=0,posY=0,imgSize=220,isDrag=false,dox=0,doy=0;
+const img=new Image();
+img.src="${imgSrc}";
+async function startCam(){
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    video.srcObject=s;
+    video.onloadedmetadata=()=>{resize();render();document.getElementById('loading').style.display='none'};
+  }catch(e){alert('Camera access is required for AR.');}
+}
+function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
+window.addEventListener('resize',resize);
+function drawShadow(x,y,w){
+  ${shadow ? `
+  ctx.save();ctx.beginPath();
+  const h=w*(img.naturalHeight/img.naturalWidth);
+  ctx.ellipse(x+w/2,y+h-6,w*0.32,w*0.06,0,0,Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,0.3)';ctx.fill();ctx.restore();` : ''}
+}
+function render(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if(placed){
+    const h=imgSize*(img.naturalHeight/img.naturalWidth);
+    drawShadow(posX,posY,imgSize);
+    ctx.drawImage(img,posX,posY,imgSize,h);
+    namelabel.style.left=(posX+imgSize/2-namelabel.offsetWidth/2)+'px';
+    namelabel.style.top=(posY-30)+'px';
+  }
+  requestAnimationFrame(render);
+}
+function place(){
+  const h=imgSize*(img.naturalHeight/img.naturalWidth);
+  posX=canvas.width/2-imgSize/2;posY=canvas.height-h-10;placed=true;
+  hint.textContent='Drag to move';hint.style.opacity=1;namelabel.style.display='block';
+  setTimeout(()=>hint.style.opacity=0,3000);
+}
+canvas.addEventListener('click',e=>{
+  if(placed)return;
+  const h=imgSize*(img.naturalHeight/img.naturalWidth);
+  posX=e.clientX-imgSize/2;posY=e.clientY-h;placed=true;
+  hint.textContent='Drag to move';hint.style.opacity=1;namelabel.style.display='block';
+  setTimeout(()=>hint.style.opacity=0,2500);
+});
+canvas.addEventListener('touchstart',e=>{
+  if(!placed)return;
+  const t=e.touches[0];const h=imgSize*(img.naturalHeight/img.naturalWidth);
+  if(t.clientX>=posX&&t.clientX<=posX+imgSize&&t.clientY>=posY&&t.clientY<=posY+h){isDrag=true;dox=t.clientX-posX;doy=t.clientY-posY;e.preventDefault();}
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  if(!isDrag)return;const t=e.touches[0];posX=t.clientX-dox;posY=t.clientY-doy;e.preventDefault();
+},{passive:false});
+canvas.addEventListener('touchend',()=>isDrag=false);
+canvas.addEventListener('mousedown',e=>{
+  if(!placed)return;const h=imgSize*(img.naturalHeight/img.naturalWidth);
+  if(e.clientX>=posX&&e.clientX<=posX+imgSize&&e.clientY>=posY&&e.clientY<=posY+h){isDrag=true;dox=e.clientX-posX;doy=e.clientY-posY;}
+});
+canvas.addEventListener('mousemove',e=>{if(!isDrag)return;posX=e.clientX-dox;posY=e.clientY-doy;});
+canvas.addEventListener('mouseup',()=>isDrag=false);
+function snap(){
+  const s=document.createElement('canvas');s.width=canvas.width;s.height=canvas.height;
+  const sc=s.getContext('2d');sc.drawImage(video,0,0,s.width,s.height);
+  if(placed){
+    const h=imgSize*(img.naturalHeight/img.naturalWidth);
+    ${shadow ? `
+    sc.save();sc.beginPath();
+    sc.ellipse(posX+imgSize/2,posY+h-6,imgSize*0.32,imgSize*0.06,0,0,Math.PI*2);
+    sc.fillStyle='rgba(0,0,0,0.3)';sc.fill();sc.restore();` : ''}
+    sc.drawImage(img,posX,posY,imgSize,h);
+  }
+  const a=document.createElement('a');a.download='ZuitAR_capture.png';
+  a.href=s.toDataURL('image/png');a.click();
+}
+startCam();
+<\/script>
+</body>
+</html>`;
+}
+
+/* ════════════════ AR HTML BUILDER — video panel ════════════════ */
+function buildVideoARHTML(videoDataURL, mime, label, shadow) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AR — ${escapeHTML(label)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:sans-serif}
+#camvideo{position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:1}
+#panel{position:fixed;z-index:3;display:none;border-radius:10px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,0.6);touch-action:none}
+#panel video{width:100%;height:100%;object-fit:cover;display:block;border-radius:10px}
+#shadowEl{position:fixed;z-index:2;display:none;background:radial-gradient(ellipse,rgba(0,0,0,0.35),transparent 70%);pointer-events:none}
+#ui{position:fixed;bottom:0;left:0;right:0;z-index:10;padding:12px 16px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.btn{background:rgba(124,92,255,0.92);color:white;border:none;border-radius:50px;padding:13px 26px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(124,92,255,0.4)}
+.btn.sec{background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.15);font-size:13px;padding:10px 20px}
+.controls{display:flex;gap:10px;align-items:center}
+#hint{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:white;padding:9px 18px;border-radius:50px;font-size:13px;z-index:10;text-align:center;border:1px solid rgba(124,92,255,0.3);white-space:nowrap;transition:opacity .4s}
+.sizerow{display:flex;align-items:center;gap:8px}
+.sizerow span{color:rgba(255,255,255,0.7);font-size:12px}
+input[type=range]{width:140px;accent-color:#7C5CFF}
+#loading{position:fixed;inset:0;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;color:white}
+.sp{width:44px;height:44px;border:3px solid #222;border-top:3px solid #7C5CFF;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading h2{color:#7C5CFF;margin-bottom:6px}
+#loading p{color:#666;font-size:.85rem;text-align:center;padding:0 30px}
+</style>
+</head>
+<body>
+<div id="loading"><div class="sp"></div><h2>ZuitAR Loading…</h2><p>Allow camera access,<br>then point at a flat surface</p></div>
+<video id="camvideo" autoplay playsinline muted></video>
+<div id="shadowEl"></div>
+<div id="panel"><video id="srcvideo" src="${videoDataURL}" loop playsinline autoplay muted></video></div>
+<div id="hint">Tap anywhere to place the video</div>
+<div id="ui">
+  <div class="sizerow">
+    <span>Size:</span>
+    <input type="range" id="sz" min="120" max="520" value="280" oninput="setSize(+this.value)">
+    <span id="szlbl">280px</span>
+  </div>
+  <div class="controls">
+    <button class="btn sec" onclick="reset()">↺ Reset</button>
+    <button class="btn" onclick="place()">📍 Place ${escapeHTML(label)}</button>
+    <button class="btn sec" onclick="toggleMute()" id="muteBtn">🔇 Unmute</button>
+  </div>
+</div>
+<script>
+const camvideo=document.getElementById('camvideo');
+const panel=document.getElementById('panel');
+const srcvideo=document.getElementById('srcvideo');
+const shadowEl=document.getElementById('shadowEl');
+const hint=document.getElementById('hint');
+let placed=false,posX=0,posY=0,w=280,h=158,isDrag=false,dox=0,doy=0;
+
+function setSize(px){
+  w=px; h=Math.round(px*9/16);
+  document.getElementById('szlbl').textContent=px+'px';
+  applyPos();
+}
+function applyPos(){
+  panel.style.width=w+'px'; panel.style.height=h+'px';
+  panel.style.left=posX+'px'; panel.style.top=posY+'px';
+  ${shadow ? `
+  shadowEl.style.width=(w*0.7)+'px';
+  shadowEl.style.height=(h*0.18)+'px';
+  shadowEl.style.left=(posX+w*0.15)+'px';
+  shadowEl.style.top=(posY+h-6)+'px';` : ''}
+}
+
+async function startCam(){
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    camvideo.srcObject=s;
+    camvideo.onloadedmetadata=()=>{document.getElementById('loading').style.display='none'};
+  }catch(e){alert('Camera access is required for AR.');}
+}
+
+function place(){
+  posX=window.innerWidth/2-w/2; posY=window.innerHeight-h-100;
+  placed=true; panel.style.display='block';
+  ${shadow ? "shadowEl.style.display='block';" : ''}
+  applyPos();
+  hint.textContent='Drag to move'; hint.style.opacity=1;
+  setTimeout(()=>hint.style.opacity=0,3000);
+  srcvideo.play();
+}
+function reset(){
+  placed=false; panel.style.display='none'; shadowEl.style.display='none';
+  hint.textContent='Tap anywhere to place the video'; hint.style.opacity=1;
+}
+function toggleMute(){
+  srcvideo.muted=!srcvideo.muted;
+  document.getElementById('muteBtn').textContent = srcvideo.muted ? '🔇 Unmute' : '🔊 Mute';
+}
+
+document.body.addEventListener('click',e=>{
+  if(placed || e.target.closest('#ui') || e.target.closest('#panel'))return;
+  posX=e.clientX-w/2; posY=e.clientY-h/2; placed=true; panel.style.display='block';
+  ${shadow ? "shadowEl.style.display='block';" : ''}
+  applyPos(); srcvideo.play();
+  hint.textContent='Drag to move'; hint.style.opacity=1;
+  setTimeout(()=>hint.style.opacity=0,2500);
+});
+
+panel.addEventListener('touchstart',e=>{isDrag=true;const t=e.touches[0];dox=t.clientX-posX;doy=t.clientY-posY;e.preventDefault();},{passive:false});
+panel.addEventListener('touchmove',e=>{if(!isDrag)return;const t=e.touches[0];posX=t.clientX-dox;posY=t.clientY-doy;applyPos();e.preventDefault();},{passive:false});
+panel.addEventListener('touchend',()=>isDrag=false);
+panel.addEventListener('mousedown',e=>{isDrag=true;dox=e.clientX-posX;doy=e.clientY-posY;e.stopPropagation();});
+document.addEventListener('mousemove',e=>{if(!isDrag)return;posX=e.clientX-dox;posY=e.clientY-doy;applyPos();});
+document.addEventListener('mouseup',()=>isDrag=false);
+
+startCam();
+<\/script>
+</body>
+</html>`;
+}
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ════════════════ MAIN GENERATE ════════════════ */
+async function generate() {
+  if (!hasUpload(currentMode)) return;
+
+  document.getElementById('generateBtn').disabled = true;
+  document.getElementById('progressList').classList.add('show');
+  document.getElementById('output').classList.remove('show');
+  [1,2,3,4].forEach(n => setStep(n,''));
+
+  try {
+    const label = document.getElementById('arLabel').value || 'AR Object';
+    const shadow = document.getElementById('shadowToggle').classList.contains('on');
+    const heightCm = parseInt(document.getElementById('heightSlider').value);
+
+    setStep(1,'active'); await wait(250); setStep(1,'done');
+
+    let arPreviewEl = '';
+    let qrLabel = label;
+
+    if (currentMode === 'image') {
+      setStep(2,'active');
+      generatedGLB = buildBillboardGLB(uploadedDataURL, imgDims, heightCm/100);
+      await wait(250); setStep(2,'done');
+
+      setStep(3,'active');
+      generatedHTML = buildImageARHTML(uploadedDataURL, imgDims, label, shadow, heightCm);
+      await wait(250); setStep(3,'done');
+
+      document.getElementById('dlGLB').style.display = '';
+      setupDownload('dlGLB', new Blob([generatedGLB], {type:'model/gltf-binary'}), sanitizeFilename(label)+'.glb');
+
+      renderARPreviewImage(uploadedDataURL);
+
+    } else if (currentMode === 'video') {
+      setStep(2,'active');
+      // Inline the video as base64 data URL for a fully self-contained file
+      const videoDataURL = await fileToDataURL(uploadedVideoFile);
+      await wait(250); setStep(2,'done');
+
+      setStep(3,'active');
+      generatedHTML = buildVideoARHTML(videoDataURL, uploadedVideoFile.type, label, shadow);
+      await wait(250); setStep(3,'done');
+
+      document.getElementById('dlGLB').style.display = 'none';
+      renderARPreviewVideo(uploadedVideoURL);
+
+    } else if (currentMode === 'glb') {
+      setStep(2,'active');
+      generatedGLB = new Uint8Array(uploadedGLBBytes);
+      await wait(250); setStep(2,'done');
+
+      setStep(3,'active');
+      const autorotate = document.getElementById('rotateToggle').classList.contains('on');
+      generatedHTML = buildGLBViewerHTML(generatedGLB, label, autorotate);
+      await wait(250); setStep(3,'done');
+
+      document.getElementById('dlGLB').style.display = '';
+      setupDownload('dlGLB', new Blob([generatedGLB], {type:'model/gltf-binary'}), sanitizeFilename(label)+'.glb');
+
+      renderARPreviewGLBIcon();
+    }
+
+    setStep(4,'active'); await wait(200);
+    document.getElementById('qr-render').innerHTML = '';
+    new QRCode(document.getElementById('qr-render'), {
+      text: 'zuitar.app',
+      width: 168, height: 168,
+      colorDark: '#0A0A0B', colorLight: '#ffffff',
+      typeNumber: 0,
+      correctLevel: QRCode.CorrectLevel.L
+    });
+    setStep(4,'done');
+
+    setupDownload('dlHTML', new Blob([generatedHTML], {type:'text/html'}), 'zuitar_experience.html');
+
+    document.getElementById('output').classList.add('show');
+    document.getElementById('output').scrollIntoView({behavior:'smooth', block:'start'});
+
+  } catch (err) {
+    console.error('ZuitAR generation failed:', err);
+    alert('Something went wrong: ' + err.message + '\\n\\nTry a smaller file or reload the page.');
+    document.getElementById('progressList').classList.remove('show');
+  } finally {
+    document.getElementById('generateBtn').disabled = false;
+  }
+}
+
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+function sanitizeFilename(s) {
+  return s.trim().replace(/[^a-z0-9]+/gi, '_').toLowerCase() || 'zuitar';
+}
+
+function setupDownload(btnId, blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const el = document.getElementById(btnId);
+  el.href = url;
+  el.download = filename;
+}
+
+function renderARPreviewImage(src) {
+  const box = document.getElementById('arPreviewBox');
+  box.querySelectorAll('img,video').forEach(e => e.remove());
+  const img = document.createElement('img');
+  img.src = src;
+  box.appendChild(img);
+}
+function renderARPreviewVideo(src) {
+  const box = document.getElementById('arPreviewBox');
+  box.querySelectorAll('img,video').forEach(e => e.remove());
+  const v = document.createElement('video');
+  v.src = src; v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+  box.appendChild(v);
+}
+function renderARPreviewGLBIcon() {
+  const box = document.getElementById('arPreviewBox');
+  box.querySelectorAll('img,video').forEach(e => e.remove());
+  const span = document.createElement('div');
+  span.style.cssText = 'position:relative;z-index:1;font-size:52px';
+  span.textContent = '📦';
+  box.appendChild(span);
+}
+
+/* ════════════════ GLB VIEWER (for direct GLB upload mode) ════════════════ */
+function buildGLBViewerHTML(glbBytes, label, autorotate) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < glbBytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, glbBytes.subarray(i, i + chunkSize));
+  }
+  const glbB64 = btoa(binary);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AR — ${escapeHTML(label)}</title>
+<script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"><\/script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0A0A0B;min-height:100vh;display:flex;flex-direction:column;align-items:center;font-family:sans-serif;color:#fff}
+header{width:100%;padding:16px 20px;background:#131316;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:10px}
+header h1{font-size:1.05rem;color:#7C5CFF;font-weight:700}
+model-viewer{width:100%;max-width:600px;height:65vh;margin:20px;background:radial-gradient(circle,#16141c,#0a0a0b);border-radius:18px;border:1px solid rgba(124,92,255,0.2)}
+.ar-btn{padding:15px 26px;background:linear-gradient(135deg,#7C5CFF,#00E5C7);border:none;border-radius:12px;color:white;font-weight:700;font-size:0.95rem;cursor:pointer}
+</style>
+</head>
+<body>
+<header><h1>ZuitAR — ${escapeHTML(label)}</h1></header>
+<model-viewer src="data:model/gltf-binary;base64,${glbB64}" alt="${escapeHTML(label)}" ar ar-modes="webxr scene-viewer quick-look" camera-controls ${autorotate ? 'auto-rotate' : ''} shadow-intensity="1" environment-image="neutral" ar-placement="floor">
+  <button slot="ar-button" class="ar-btn">📱 View in your room</button>
+</model-viewer>
+</body>
+</html>`;
+}
+</script>
+</body>
+</html>
